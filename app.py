@@ -62,18 +62,29 @@ async def connected_camera_table(connected_cameras: dict[str, WirelessGoPro]):
     console.print(table)
 
 
-def prompt_device_selection(devices: dict[str, BLEDevice]) -> str:
+def prompt_device_selection(devices: dict[str, BLEDevice]) -> str | None:
     """Prompt user to choose which device(s) to connect to."""
 
-    choices = ["All", "None"]
-    choices.extend([n for n in devices.keys()])
-    prompt = Prompt.ask(
-        "Do you want to connect to any of the found devices?",
-        console=console,
-        choices=choices
-    )
+    if devices:
+        choices = ["All", "None"]
+        choices.extend([n for n in devices.keys()])
+        prompt = Prompt.ask(
+            "Do you want to connect to any of the found devices?",
+            console=console,
+            choices=choices
+        )
 
-    return prompt
+        return prompt
+
+    else:
+        console.log(
+            """No cameras were found. Make sure:
+            1) All cameras are turned on
+            2) The computer's bluetooth is turned on
+            3) If this is the first time connecting to a camera, it must be in pairing mode"""
+        )
+
+        return
 
 
 async def connect_camera(
@@ -230,7 +241,6 @@ async def main() -> None:
             choices=["Connect", "Disconnect", "View", "Record", "Help", "Quit"]
         )
         logging.info(f"First action prompt was displayed, response was {first_action}.")
-        console.clear()
 
         if first_action == "Connect":
             found_devices: dict[str, BLEDevice] = dict()
@@ -240,7 +250,8 @@ async def main() -> None:
             device_table(found_devices)
             connect_prompt = prompt_device_selection(found_devices)
             logging.info(f"The connect prompt was displayed, user chose: {connect_prompt}.")
-            await connect_camera(found_devices, connected_cameras, connect_prompt)
+            if connect_prompt is not None:
+                await connect_camera(found_devices, connected_cameras, connect_prompt)
 
         elif first_action == "Disconnect":
             await disconnect_cameras(connected_cameras)
