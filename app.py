@@ -200,12 +200,11 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
             logging.info(f"Keyboard event was: {event.key}.")
         if event.key == keyboard.Key.page_down:
             correct_key = True
-            with console.status("Recording..."):
-                tasks = []
-                async with asyncio.TaskGroup() as tg:  # once context manager exits all tasks are awaited
-                    for cam in connected_cameras.values():
-                        tasks.append(tg.create_task(cam.ble_command.set_shutter(shutter=Params.Toggle.ENABLE)))
-                logging.info("Recording started.")
+            tasks = []
+            async with asyncio.TaskGroup() as tg:  # once context manager exits all tasks are awaited
+                for cam in connected_cameras.values():
+                    tasks.append(tg.create_task(cam.ble_command.set_shutter(shutter=Params.Toggle.ENABLE)))
+            logging.info("Recording started.")
         elif event.key == keyboard.Key.esc:
             correct_key = True
             console.log("Cancelling recording.")
@@ -214,11 +213,13 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
     # Wait for stop trigger
     correct_key = False
     while not correct_key:
-        logging.info("Starting keyboard listener, waiting for stop trigger.")
-        with keyboard.Events() as events:
-            event = events.get(timeout)
-        logging.info(f"Keyboard event was: {event.key}.")
+        with console.status("Recording..."):
+            logging.info("Starting keyboard listener, waiting for stop trigger.")
+            with keyboard.Events() as events:
+                event = events.get(timeout)
+            logging.info(f"Keyboard event was: {event.key}.")
         if event.key == keyboard.Key.page_down:
+            correct_key = True
             tasks = []
             async with asyncio.TaskGroup() as tg:  # once context manager exits all tasks are awaited
                 for cam in connected_cameras.values():
