@@ -97,34 +97,35 @@ async def connect_camera(
     if connect_prompt == "None":
         pass
     else:
-        if connect_prompt == "All":
-            for name in found_devices.keys():
-                if name in connected_cameras:
-                    console.log(f"{name} is already connected")
-                    continue
-                try:
-                    cam = WirelessGoPro(target=name, enable_wifi=False)
-                    await cam.open()
-                    console.log(f"Connected to {name}")
-                    connected_cameras[name] = cam
-                except Exception as e:
-                    logging.error(f"Failed to connect to camera, error message: {e}.")
-                    console.log(e)
-        else:
-            if connect_prompt in connected_cameras:
-                pass
+        with console.status("Connecting to cameras..."):
+            if connect_prompt == "All":
+                for name in found_devices.keys():
+                    if name in connected_cameras:
+                        console.log(f"{name} is already connected")
+                        continue
+                    try:
+                        cam = WirelessGoPro(target=name, enable_wifi=False)
+                        await cam.open()
+                        console.log(f"Connected to {name}")
+                        connected_cameras[name] = cam
+                    except Exception as e:
+                        logging.error(f"Failed to connect to camera, error message: {e}.")
+                        console.log(e)
             else:
-                try:
-                    cam = WirelessGoPro(target=connect_prompt, enable_wifi=False)
-                    await cam.open()
-                    console.log(f"Connected to {connect_prompt}")
-                    connected_cameras[connect_prompt] = cam
-                except Exception as e:
-                    logging.error(f"Failed to connect to camera, error message: {e}.")
-                    console.log(e)
+                if connect_prompt in connected_cameras:
+                    pass
+                else:
+                    try:
+                        cam = WirelessGoPro(target=connect_prompt, enable_wifi=False)
+                        await cam.open()
+                        console.log(f"Connected to {connect_prompt}")
+                        connected_cameras[connect_prompt] = cam
+                    except Exception as e:
+                        logging.error(f"Failed to connect to camera, error message: {e}.")
+                        console.log(e)
 
 
-async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro]) -> None:
+async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_flag: bool = False) -> None:
     """Disconnect all currently connected GoPro cameras.
 
     It is very important to call the close() method on each WirelessGoPro
@@ -134,16 +135,18 @@ async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro]) -> Non
     """
 
     if connected_cameras:
-        disconnected = list()
-        for cam in connected_cameras:
-            await connected_cameras[cam].close()
-            disconnected.append(cam)
-            logging.info(f"Disconnected from {cam}.")
-            console.log(f"Disconnected from {cam}")
-        for cam in disconnected:
-            del connected_cameras[cam]
+        with console.status("Disconnecting from cameras..."):
+            disconnected = list()
+            for cam in connected_cameras:
+                await connected_cameras[cam].close()
+                disconnected.append(cam)
+                logging.info(f"Disconnected from {cam}.")
+                console.log(f"Disconnected from {cam}")
+            for cam in disconnected:
+                del connected_cameras[cam]
     else:
-        console.log("No cameras are currently connected")
+        if not quit_flag:
+            console.log("No cameras are currently connected")
 
 
 async def wait_for_camera_ready(connected_cameras: dict[str, WirelessGoPro]) -> bool:
@@ -279,7 +282,7 @@ async def main() -> None:
             console.print("Need to add help info")
 
         elif first_action == "Quit":
-            await disconnect_cameras(connected_cameras)
+            await disconnect_cameras(connected_cameras, quit_flag=True)
             logging.info("Quitting application.")
             console.log("Goodbye!")
             await asyncio.sleep(1)
