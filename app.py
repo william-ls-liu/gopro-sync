@@ -14,7 +14,13 @@ from datetime import datetime
 
 
 async def scan_for_cameras() -> dict[str, BLEDevice]:
-    """Scan for available GoPro cameras."""
+    """Scan for available GoPro cameras.
+
+    Returns
+    -------
+    dict[str, BLEDevice]
+        Dictionary of GoPro cameras that were found during scanning.
+    """
 
     devices: dict[str, BLEDevice] = dict()
 
@@ -30,8 +36,14 @@ async def scan_for_cameras() -> dict[str, BLEDevice]:
     return devices
 
 
-def device_table(devices: dict[str, BLEDevice]):
-    """Display table with GoPro cameras found by scanning."""
+def device_table(devices: dict[str, BLEDevice]) -> None:
+    """Display table with GoPro cameras found by scanning.
+
+    Parameters
+    ----------
+    devices : dict[str, BLEDevice]
+        Dictionary of GoPro cameras found during scanning.
+    """
 
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Device Name")
@@ -43,8 +55,15 @@ def device_table(devices: dict[str, BLEDevice]):
     console.print(table)
 
 
-async def connected_camera_table(connected_cameras: dict[str, WirelessGoPro]):
-    """Display a table with infor about each connected GoPro."""
+async def connected_camera_table(connected_cameras: dict[str, WirelessGoPro]) -> None:
+    """Display a table with infor about each connected GoPro.
+
+    Parameters
+    ----------
+    connected_cameras : dict[str, WirelessGoPro]
+        Dictionary of currently connected cameras, where key is the camera name
+        and value is the `WirelessGoPro` instance.
+    """
 
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("Camera Name")
@@ -63,7 +82,19 @@ async def connected_camera_table(connected_cameras: dict[str, WirelessGoPro]):
 
 
 def prompt_device_selection(devices: dict[str, BLEDevice]) -> str | None:
-    """Prompt user to choose which device(s) to connect to."""
+    """Prompt user to choose which device(s) to connect to.
+
+    Parameters
+    ----------
+    devices : dict[str, BLEDevice]
+        Dictionary of GoPro cameras found during scanning.
+
+    Returns
+    -------
+    str | None
+        A string representing the user's choice, or `None` if no cameras were
+        found during scanning.
+    """
 
     if devices:
         choices = ["All", "None"]
@@ -91,8 +122,19 @@ async def connect_camera(
         found_devices: dict[str, BLEDevice],
         connected_cameras: dict[str, WirelessGoPro],
         connect_prompt: str
-):
-    """Connect to camera(s) based on user input."""
+) -> None:
+    """Connect to camera(s) based on user input.
+
+    Parameters
+    ----------
+    found_devices : dict[str, BLEDevice]
+        Dictionary of GoPro cameras that were discovered during scanning.
+    connected_cameras : dict[str, WirelessGoPro]
+        Dictionary of currently connected cameras, where key is the camera name
+        and value is the `WirelessGoPro` instance.
+    connect_prompt : str
+        User input from the connect prompt.
+    """
 
     if connect_prompt == "None":
         pass
@@ -132,6 +174,15 @@ async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_f
     instance. If the connection is not closed gracefully it can cause issues
     the next time you try to connect to the camera. Then you have to reset the
     connections from the camera and re-pair with the computer.
+
+    Parameters
+    ----------
+    connected_cameras : dict[str, WirelessGoPro]
+        Dictionary of currently connected cameras, where key is the camera name
+        and value is the `WirelessGoPro` instance.
+    quit_flag : bool
+        Indicates whether this method was called when user is trying to quit the
+        application or merely disconnect the cameras without quitting.
     """
 
     if connected_cameras:
@@ -150,7 +201,14 @@ async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_f
 
 
 async def wait_for_camera_ready(connected_cameras: dict[str, WirelessGoPro]) -> bool:
-    """Make sure cameras are ready to receive commands."""
+    """Make sure cameras are ready to receive commands.
+
+    Parameters
+    ----------
+    connected_cameras : dict[str, WirelessGoPro]
+        Dictionary of currently connected cameras, where key is the camera name
+        and value is the `WirelessGoPro` instance.
+    """
 
     if connected_cameras:
         not_ready = 0
@@ -179,7 +237,7 @@ async def wait_for_camera_ready(connected_cameras: dict[str, WirelessGoPro]) -> 
         return False
 
 
-async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | None = None):
+async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | None = None) -> None:
     """Listen for the Page Down keycode to start/stop a recording.
 
     Parameters
@@ -230,7 +288,8 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
 
 
 async def main() -> None:
-    """"""
+    """Entrypoint for the asynchronous event loop."""
+
     console.rule("Welcome to the GoPro Camera Control App")
     logging.info("Entered main, starting app.")
     running = True
