@@ -3,7 +3,7 @@
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.table import Table
-from open_gopro import WirelessGoPro, Params
+from open_gopro import WirelessGoPro, Params, constants, GoProResp
 import asyncio
 from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
@@ -287,6 +287,73 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
                     tasks.append(tg.create_task(cam.ble_command.set_shutter(shutter=Params.Toggle.DISABLE)))
 
 
+async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro]) -> None:
+    """Ensure all cameras are recording with the same video settings.
+
+    The standard settings for all users are:
+
+    Parameters
+    ----------
+    connected_cameras : dict[str, WirelessGoPro]
+        Dictionary containining the WirelessGoPro instances of the currently
+        connected cameras.
+    """
+
+    # Standard settings
+    video_profile = Params.VideoProfile.STANDARD
+    bit_depth = Params.BitDepth.BIT_8
+    bit_rate = Params.BitRate.HIGH
+    fps = Params.FPS.FPS_60
+    hindsight = Params.Hindsight.OFF
+    hypersmooth = Params.HypersmoothMode.OFF
+    resolution = Params.Resolution.RES_1080
+    aspect_ratio = Params.VideoAspectRatio.RATIO_16_9
+    video_fov = Params.VideoFOV.LINEAR
+
+    def _check_response(resp: GoProResp, setting: str, name: str) -> None:
+        if resp.status != constants.ErrorCode.SUCCESS:
+            logging.error(f"{name} did not succeed in changing the {setting}.")
+            console.log(f"{name} did not succeed in changing the {setting}. Try re-connecting to the cameras.")
+
+    with console.status("Verifying camera settings..."):
+        for name, cam in connected_cameras.items():
+            # Set SDR mode
+            resp = await (cam.ble_setting.video_profile).set(video_profile)
+            _check_response(resp, 'video_profile', name)
+
+            # Set the bit depth
+            resp = await (cam.ble_setting.bit_depth).set(bit_depth)
+            _check_response(resp, 'bit_depth', name)
+
+            # Set the bit rate
+            resp = await (cam.ble_setting.bit_rate).set(bit_rate)
+            _check_response(resp, 'bit_rate', name)
+
+            # Set the fps
+            resp = await (cam.ble_setting.fps).set(fps)
+            _check_response(resp, 'fps', name)
+
+            # Turn off hindsight
+            resp = await (cam.ble_setting.hindsight).set(hindsight)
+            _check_response(resp, 'hindsight', name)
+
+            # Turn off hypersmooth
+            resp = await (cam.ble_setting.hypersmooth).set(hypersmooth)
+            _check_response(resp, 'hypersmooth', name)
+
+            # Set resolution
+            resp = await (cam.ble_setting.resolution).set(resolution)
+            _check_response(resp, 'resolution', name)
+
+            # Set aspect ratio
+            resp = await (cam.ble_setting.video_aspect_ratio).set(aspect_ratio)
+            _check_response(resp, 'aspect_ratio', name)
+
+            # Set the field of view
+            resp = await (cam.ble_setting.video_field_of_view).set(video_fov)
+            _check_response(resp, 'fov', name)
+
+
 async def main() -> None:
     """Entrypoint for the asynchronous event loop."""
 
@@ -315,6 +382,7 @@ async def main() -> None:
             logging.info(f"The connect prompt was displayed, user chose: {connect_prompt}.")
             if connect_prompt is not None:
                 await connect_camera(found_devices, connected_cameras, connect_prompt)
+                await enforce_camera_settings(connected_cameras)
 
         elif first_action == "Disconnect":
             await disconnect_cameras(connected_cameras)
