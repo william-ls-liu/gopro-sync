@@ -139,7 +139,7 @@ async def connect_camera(
     if connect_prompt == "None":
         pass
     else:
-        with console.status("Connecting to cameras..."):
+        with console.status("Connecting to cameras...", spinner='bouncingBar'):
             if connect_prompt == "All":
                 for name in found_devices.keys():
                     if name in connected_cameras:
@@ -186,7 +186,7 @@ async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_f
     """
 
     if connected_cameras:
-        with console.status("Disconnecting from cameras..."):
+        with console.status("Disconnecting from cameras...", spinner='bouncingBar'):
             disconnected = list()
             for cam in connected_cameras:
                 await connected_cameras[cam].close()
@@ -251,7 +251,10 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
 
     correct_key: bool = False
     while not correct_key:
-        with console.status("Waiting for start trigger. Switch application focus to Mobility Lab"):
+        with console.status(
+            "Waiting for start trigger. Switch application focus to Mobility Lab",
+            spinner='bouncingBar'
+        ):
             # the key release after pressing enter can trigger the event listner, so sleep for a few seconds to ensure
             # no keys are actively being pressed
             await asyncio.sleep(2)
@@ -274,7 +277,7 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
     # Wait for stop trigger
     correct_key = False
     while not correct_key:
-        with console.status("Recording..."):
+        with console.status("Recording...", spinner='bouncingBar'):
             logging.info("Starting keyboard listener, waiting for stop trigger.")
             with keyboard.Events() as events:
                 event = events.get(timeout)
@@ -315,7 +318,7 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro]) -
             logging.error(f"{name} did not succeed in changing the {setting}.")
             console.log(f"{name} did not succeed in changing the {setting}. Try re-connecting to the cameras.")
 
-    with console.status("Verifying camera settings..."):
+    with console.status("Verifying camera settings...", spinner='bouncingBar'):
         for name, cam in connected_cameras.items():
             # Set SDR mode
             resp = await (cam.ble_setting.video_profile).set(video_profile)
@@ -374,7 +377,7 @@ async def main() -> None:
 
         if first_action == "Connect":
             found_devices: dict[str, BLEDevice] = dict()
-            with console.status("Scanning for cameras..", spinner="shark"):
+            with console.status("Scanning for cameras..", spinner='bouncingBar'):
                 found_devices = await scan_for_cameras()
             logging.info(f"Scanning found the following cameras: {found_devices}.")
             device_table(found_devices)
@@ -416,22 +419,21 @@ async def main() -> None:
             running = False
 
 
-if __name__ == "__main__":
-    cwd = os.getcwd()
-    log_folder = os.path.join(cwd, 'log')
-    if not os.path.exists(log_folder):
-        os.mkdir(log_folder)
-    now = datetime.now()
-    now_str = now.strftime('%Y-%m-%d_%H-%M-%S')
-    log_fname = os.path.join(log_folder, f'{now_str}.log')
-    logger = logging.getLogger()
-    logging.basicConfig(
-        filename=log_fname,
-        encoding='utf-8',
-        format='%(asctime)s:%(levelname)s:%(message)s',
-        level=logging.INFO
-    )
-    console = Console()
+cwd = os.getcwd()
+log_folder = os.path.join(cwd, 'log')
+if not os.path.exists(log_folder):
+    os.mkdir(log_folder)
+now = datetime.now()
+now_str = now.strftime('%Y-%m-%d_%H-%M-%S')
+log_fname = os.path.join(log_folder, f'{now_str}.log')
+logger = logging.getLogger()
+logging.basicConfig(
+    filename=log_fname,
+    encoding='utf-8',
+    format='%(asctime)s:%(levelname)s:%(message)s',
+    level=logging.INFO
+)
+console = Console()
 
-    loop = asyncio.new_event_loop()
-    loop.run_until_complete(main())
+loop = asyncio.new_event_loop()
+loop.run_until_complete(main())
