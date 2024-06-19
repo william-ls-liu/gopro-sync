@@ -108,7 +108,7 @@ def prompt_device_selection(devices: dict[str, BLEDevice]) -> str | None:
         return prompt
 
     else:
-        console.log(
+        console.print(
             """No cameras were found. Make sure:
             1) All cameras are turned on
             2) The computer's bluetooth is turned on
@@ -143,16 +143,16 @@ async def connect_camera(
             if connect_prompt == "All":
                 for name in found_devices.keys():
                     if name in connected_cameras:
-                        console.log(f"{name} is already connected")
+                        console.print(f"{name} is already connected")
                         continue
                     try:
                         cam = WirelessGoPro(target=name, enable_wifi=False)
                         await cam.open()
-                        console.log(f"Connected to {name}")
+                        console.print(f"Connected to {name}")
                         connected_cameras[name] = cam
                     except Exception as e:
                         logging.error(f"Failed to connect to camera, error message: {e}.")
-                        console.log(e)
+                        console.print(e)
             else:
                 if connect_prompt in connected_cameras:
                     pass
@@ -160,11 +160,11 @@ async def connect_camera(
                     try:
                         cam = WirelessGoPro(target=connect_prompt, enable_wifi=False)
                         await cam.open()
-                        console.log(f"Connected to {connect_prompt}")
+                        console.print(f"Connected to {connect_prompt}")
                         connected_cameras[connect_prompt] = cam
                     except Exception as e:
                         logging.error(f"Failed to connect to camera, error message: {e}.")
-                        console.log(e)
+                        console.print(e)
 
 
 async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_flag: bool = False) -> None:
@@ -192,12 +192,12 @@ async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_f
                 await connected_cameras[cam].close()
                 disconnected.append(cam)
                 logging.info(f"Disconnected from {cam}.")
-                console.log(f"Disconnected from {cam}")
+                console.print(f"Disconnected from {cam}")
             for cam in disconnected:
                 del connected_cameras[cam]
     else:
         if not quit_flag:
-            console.log("No cameras are currently connected")
+            console.print("No cameras are currently connected")
 
 
 async def wait_for_camera_ready(connected_cameras: dict[str, WirelessGoPro]) -> bool:
@@ -223,17 +223,17 @@ async def wait_for_camera_ready(connected_cameras: dict[str, WirelessGoPro]) -> 
                 await asyncio.sleep(1)
             if ready:
                 logging.info(f"{name} is ready.")
-                console.log(f"{name} is ready!")
+                console.print(f"{name} is ready!")
             else:
                 not_ready += 1
                 logging.info(f"{name} is not ready.")
-                console.log(f"Timed-out waiting for {name} to be ready. Try again.")
+                console.print(f"Timed-out waiting for {name} to be ready. Try again.")
         if not_ready != 0:
             return False
         else:
             return True
     else:
-        console.log("No cameras are connected!")
+        console.print("No cameras are connected!")
         return False
 
 
@@ -271,7 +271,7 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
             logging.info("Recording started.")
         elif event.key == keyboard.Key.esc:
             correct_key = True
-            console.log("Cancelling recording.")
+            console.print("Cancelling recording.")
             logging.info("Recording cancelled.")
 
     # Wait for stop trigger
@@ -333,7 +333,7 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
                     if _check_response(resp, setting, name, i):
                         break
                     if i == (retries - 1):
-                        console.log(
+                        console.print(
                             f"{name} did not succeed in changing the {setting}. Try re-connecting to the cameras."
                         )
 
@@ -375,19 +375,19 @@ async def main() -> None:
             if connected_cameras:
                 await connected_camera_table(connected_cameras)
             else:
-                console.log("No cameras currently connected")
+                console.print("No cameras currently connected")
 
         elif first_action == "Record":
             if connected_cameras:
                 ready_to_record = await wait_for_camera_ready(connected_cameras)
                 logging.info(f"Ready to record is {ready_to_record}.")
                 if ready_to_record:
-                    console.log("All cameras are ready to record.")
+                    console.print("All cameras are ready to record.")
                     await record(connected_cameras)
                 else:
-                    console.log("At least one of the cameras is not ready to receive commands. Try again.")
+                    console.print("At least one of the cameras is not ready to receive commands. Try again.")
             else:
-                console.log("No cameras currently connected")
+                console.print("No cameras currently connected")
 
         elif first_action == "Help":
             console.print("Need to add help info")
@@ -395,7 +395,7 @@ async def main() -> None:
         elif first_action == "Quit":
             await disconnect_cameras(connected_cameras, quit_flag=True)
             logging.info("Quitting application.")
-            console.log("Goodbye!")
+            console.print("Goodbye!")
             await asyncio.sleep(1)
             running = False
 
