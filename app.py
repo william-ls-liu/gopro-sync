@@ -232,7 +232,7 @@ async def wait_for_camera_ready(connected_cameras: dict[str, WirelessGoPro]) -> 
             logging.info(f"Check if {name} is ready...")
             ready = False
             for _ in range(10):
-                status = await cam.is_ready
+                status = await cam.ble_status.system_ready.get_value()
                 if status:
                     ready = True
                     break
@@ -272,7 +272,7 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
 
     while not correct_key:
         with console.status(
-            "Switch application focus to Mobility Lab, then press > on remote to start recording.",
+            "Switch application focus to Mobility Lab, then press > on remote to start recording. Press ESC to cancel.",
             spinner='bouncingBar'
         ):
             logging.info("Starting keyboard listener, waiting for start trigger.")
@@ -400,7 +400,6 @@ async def main() -> None:
                 ready_to_record = await wait_for_camera_ready(connected_cameras)
                 logging.info(f"Ready to record is {ready_to_record}.")
                 if ready_to_record:
-                    console.print("All cameras are ready to record.")
                     await record(connected_cameras)
                 else:
                     console.print("At least one of the cameras is not ready to receive commands. Try again.")
