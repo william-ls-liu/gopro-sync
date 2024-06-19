@@ -248,6 +248,9 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
     timeout : int | float
         Maximum time, in seconds, to wait for the key press before cancelling.
     """
+    # The key release after pressing ENTER can trigger the event listner, so sleep for a second to ensure
+    # no keys are actively being pressed
+    await asyncio.sleep(1)
 
     correct_key: bool = False
     while not correct_key:
@@ -255,9 +258,6 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
             "Waiting for start trigger. Switch application focus to Mobility Lab",
             spinner='bouncingBar'
         ):
-            # the key release after pressing enter can trigger the event listner, so sleep for a few seconds to ensure
-            # no keys are actively being pressed
-            await asyncio.sleep(2)
             logging.info("Starting keyboard listener, waiting for start trigger.")
             with keyboard.Events() as events:
                 event = events.get(timeout)
@@ -313,15 +313,16 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
         'hypersmooth': Params.HypersmoothMode.OFF,
         'hindsight': Params.Hindsight.OFF,
         'bit_depth': Params.BitDepth.BIT_8,
-        'bit_rate': Params.BitRate.HIGH
+        'bit_rate': Params.BitRate.HIGH,
+        'auto_off': Params.AutoOff.NEVER
     }
 
-    def _check_response(resp: GoProResp, setting: str, name: str) -> bool:
+    def _check_response(resp: GoProResp, setting: str, name: str, retry: int) -> bool:
         if resp.status != constants.ErrorCode.SUCCESS:
-            logging.error(f"{name} did not succeed in changing the {setting}.")
+            logging.error(f"{name} did not succeed in changing the {setting} on try #{retry}.")
             return False
 
-        logging.info(f"{name} changed {setting} successfully.")
+        logging.info(f"{name} changed {setting} successfully on try #{retry}.")
         return True
 
     with console.status("Verifying camera settings...", spinner='bouncingBar'):
@@ -329,7 +330,7 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
             for setting in settings:
                 for i in range(retries):
                     resp = await (getattr(cam.ble_setting, setting)).set(settings[setting])
-                    if _check_response(resp, setting, name):
+                    if _check_response(resp, setting, name, i):
                         break
                     if i == (retries - 1):
                         console.log(
