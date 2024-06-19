@@ -269,9 +269,10 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
     await asyncio.sleep(1)
 
     correct_key: bool = False
+
     while not correct_key:
         with console.status(
-            "Waiting for start trigger. Switch application focus to Mobility Lab",
+            "Switch application focus to Mobility Lab, then press > on remote to start recording.",
             spinner='bouncingBar'
         ):
             logging.info("Starting keyboard listener, waiting for start trigger.")
@@ -286,14 +287,14 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
                     tasks.append(tg.create_task(cam.ble_command.set_shutter(shutter=Params.Toggle.ENABLE)))
             logging.info("Recording started.")
         elif event.key == keyboard.Key.esc:
-            correct_key = True
-            console.print("Cancelling recording.")
+            console.print("Recording cancelled.")
             logging.info("Recording cancelled.")
+            return
 
     # Wait for stop trigger
     correct_key = False
     while not correct_key:
-        with console.status("Recording...", spinner='bouncingBar'):
+        with console.status("Recording... Press > on remote to stop recording.", spinner='bouncingBar'):
             logging.info("Starting keyboard listener, waiting for stop trigger.")
             with keyboard.Events() as events:
                 event = events.get(timeout)
