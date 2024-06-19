@@ -1,9 +1,10 @@
 # Author: William Liu <liwi@ohsu.edu>
 
 from rich.console import Console
-from rich.prompt import Prompt
+from rich.prompt import Prompt, Confirm
 from rich.table import Table
 from open_gopro import WirelessGoPro, Params, constants, GoProResp
+from open_gopro.exceptions import FailedToFindDevice, ConnectFailed
 import asyncio
 from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
@@ -139,32 +140,47 @@ async def connect_camera(
     if connect_prompt == "None":
         pass
     else:
-        with console.status("Connecting to cameras...", spinner='bouncingBar'):
-            if connect_prompt == "All":
-                for name in found_devices.keys():
-                    if name in connected_cameras:
-                        console.print(f"{name} is already connected")
-                        continue
-                    try:
-                        cam = WirelessGoPro(target=name, enable_wifi=False)
-                        await cam.open()
-                        console.print(f"Connected to {name}")
-                        connected_cameras[name] = cam
-                    except Exception as e:
-                        logging.error(f"Failed to connect to camera, error message: {e}.")
-                        console.print(e)
-            else:
-                if connect_prompt in connected_cameras:
-                    pass
+        retry: bool = True
+        while retry:
+            missed_connections: list = []
+            retry = False
+            with console.status("Connecting to cameras...", spinner='bouncingBar'):
+                if connect_prompt == "All":
+                    for name in found_devices.keys():
+                        if name in connected_cameras:
+                            console.print(f"{name} is already connected.")
+                            continue
+                        try:
+                            cam = WirelessGoPro(target=name, enable_wifi=False)
+                            await cam.open()
+                            console.print(f"Connected to {name}")
+                            connected_cameras[name] = cam
+                        except FailedToFindDevice:
+                            logging.error(f"Failed to find {name}.")
+                            missed_connections.append(name)
+                        except ConnectFailed:
+                            logging.error(f"Failed to connect to {name}.")
+                            missed_connections.append(name)
                 else:
-                    try:
-                        cam = WirelessGoPro(target=connect_prompt, enable_wifi=False)
-                        await cam.open()
-                        console.print(f"Connected to {connect_prompt}")
-                        connected_cameras[connect_prompt] = cam
-                    except Exception as e:
-                        logging.error(f"Failed to connect to camera, error message: {e}.")
-                        console.print(e)
+                    if connect_prompt in connected_cameras:
+                        console.print(f"{connect_prompt} is already connected.")
+                        retry = False
+                    else:
+                        try:
+                            cam = WirelessGoPro(target=connect_prompt, enable_wifi=False)
+                            await cam.open()
+                            console.print(f"Connected to {connect_prompt}")
+                            connected_cameras[connect_prompt] = cam
+                        except FailedToFindDevice:
+                            logging.error(f"Failed to find {connect_prompt}.")
+                            missed_connections.append(connect_prompt)
+                        except ConnectFailed:
+                            logging.error(f"Failed to connect to {connect_prompt}.")
+                            missed_connections.append(connect_prompt)
+            if missed_connections:
+                retry = Confirm.ask(
+                    f"Could not connect to the following camera(s): {missed_connections}. Retry?"
+                )
 
 
 async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_flag: bool = False) -> None:
@@ -319,10 +335,10 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
 
     def _check_response(resp: GoProResp, setting: str, name: str, retry: int) -> bool:
         if resp.status != constants.ErrorCode.SUCCESS:
-            logging.error(f"{name} did not succeed in changing the {setting} on try #{retry}.")
+            logging.error(f"{name} did not succeed in changing the {setting} on try #{retry + 1}.")
             return False
 
-        logging.info(f"{name} changed {setting} successfully on try #{retry}.")
+        logging.info(f"{name} changed {setting} successfully on try #{retry + 1}.")
         return True
 
     with console.status("Verifying camera settings...", spinner='bouncingBar'):
@@ -361,7 +377,8 @@ async def main() -> None:
             with console.status("Scanning for cameras..", spinner='bouncingBar'):
                 found_devices = await scan_for_cameras()
             logging.info(f"Scanning found the following cameras: {found_devices}.")
-            device_table(found_devices)
+            if found_devices:
+                device_table(found_devices)
             connect_prompt = prompt_device_selection(found_devices)
             logging.info(f"The connect prompt was displayed, user chose: {connect_prompt}.")
             if connect_prompt is not None:
