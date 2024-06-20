@@ -392,6 +392,7 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
 
     # Standard settings
     settings = {
+        'load_preset_group': Params.PresetGroup.VIDEO,
         'camera_ux_mode': Params.CameraUxMode.PRO,
         'video_profile': Params.VideoProfile.STANDARD,
         'video_aspect_ratio': Params.VideoAspectRatio.RATIO_16_9,
@@ -402,7 +403,7 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
         'hindsight': Params.Hindsight.OFF,
         'bit_depth': Params.BitDepth.BIT_8,
         'bit_rate': Params.BitRate.HIGH,
-        'auto_off': Params.AutoOff.NEVER
+        'auto_off': Params.AutoOff.MIN_30
     }
 
     def _check_response(resp: GoProResp, setting: str, name: str, retry: int) -> bool:
@@ -417,10 +418,14 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
         for name, cam in connected_cameras.items():
             for setting in settings:
                 for i in range(retries):
-                    resp = await (getattr(cam.ble_setting, setting)).set(settings[setting])
+                    if setting == 'load_preset_group':  # ensure camera is in video mode
+                        resp = await (cam.ble_command.load_preset_group(group=settings[setting]))
+                    else:
+                        resp = await (getattr(cam.ble_setting, setting)).set(settings[setting])
                     if _check_response(resp, setting, name, i):
                         break
                     if i == (retries - 1):
+                        logging.warning(f"{name} did not succeed in changing the {setting}.")
                         console.print(
                             f"{name} did not succeed in changing the {setting}. Try re-connecting to the cameras."
                         )
