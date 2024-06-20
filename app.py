@@ -56,6 +56,18 @@ def device_table(devices: dict[str, BLEDevice]) -> None:
     console.print(table)
 
 
+async def get_camera_battery(cam: WirelessGoPro) -> int:
+    """Get current battery level in percent."""
+
+    return await (cam.ble_status.int_batt_per).get_value()
+
+
+async def get_camera_remaining_storage(cam: WirelessGoPro) -> int:
+    """Get remaining space on SD card, in kilobytes."""
+
+    return await (cam.ble_status.space_rem).get_value()
+
+
 async def connected_camera_table(connected_cameras: dict[str, WirelessGoPro]) -> None:
     """Display a table with infor about each connected GoPro.
 
@@ -71,8 +83,8 @@ async def connected_camera_table(connected_cameras: dict[str, WirelessGoPro]) ->
     table.add_column("Battery Level")
     table.add_column("Space Remaining on SD Card (mb)")
     for name, camera in connected_cameras.items():
-        batt = await (camera.ble_status.int_batt_per).get_value()
-        sdcard = await (camera.ble_status.space_rem).get_value()
+        batt = await get_camera_battery(camera)
+        sdcard = await get_camera_remaining_storage(camera)
         table.add_row(
             name,
             str(batt.data) + "%",
