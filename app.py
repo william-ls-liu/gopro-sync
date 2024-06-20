@@ -307,6 +307,16 @@ async def ready_to_record(connected_cameras: dict[str, WirelessGoPro]) -> bool:
                     f"{name} only has {sdcard_remaining / 1E6} GB remaining and the battery is at {batt_percent}%."
                     " Quit the app, remove some of the video files, and change the battery before proceeding."
                 )
+            elif (ready, batt_ready, sdcard_ready) == (True, False, True):
+                not_ready += 1
+                logging.info(
+                    f"{name} is ready, the battery is at {batt_percent}%, and the SD card has"
+                    f" {sdcard_remaining} kb remaining."
+                )
+                console.print(
+                    f"{name} only has battery at {batt_percent}%."
+                    " Quit the app and change the battery before proceeding."
+                )
             else:
                 not_ready += 1
                 logging.info(
