@@ -228,7 +228,7 @@ async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_f
             console.print("No cameras are currently connected")
 
 
-async def wait_for_camera_ready(connected_cameras: dict[str, WirelessGoPro]) -> bool:
+async def ready_to_record(connected_cameras: dict[str, WirelessGoPro]) -> bool:
     """Make sure cameras are ready to receive commands.
 
     Parameters
@@ -375,8 +375,8 @@ async def main() -> None:
     running = True
     connected_cameras: dict[str, WirelessGoPro] = dict()
     logging.info(f"The following cameras are connected {connected_cameras}.")
-    ready_to_record: bool = False  # flag to set when cameras are connected and not busy
-    logging.info(f"The ready_to_record status is {ready_to_record}")
+    ready: bool = False  # flag to set when cameras are connected and not busy
+    logging.info(f"The ready_to_record status is {ready}")
 
     while running:
         first_action = Prompt.ask(
@@ -409,9 +409,9 @@ async def main() -> None:
 
         elif first_action == "Record":
             if connected_cameras:
-                ready_to_record = await wait_for_camera_ready(connected_cameras)
-                logging.info(f"Ready to record is {ready_to_record}.")
-                if ready_to_record:
+                ready = await ready_to_record(connected_cameras)
+                logging.info(f"Ready to record is {ready}.")
+                if ready:
                     await record(connected_cameras)
                 else:
                     console.print("At least one of the cameras is not ready to receive commands. Try again.")
