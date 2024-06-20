@@ -59,13 +59,35 @@ def device_table(devices: dict[str, BLEDevice]) -> None:
 async def get_camera_battery(cam: WirelessGoPro) -> int:
     """Get current battery level in percent."""
 
-    return await (cam.ble_status.int_batt_per).get_value()
+    batt = await (cam.ble_status.int_batt_per).get_value()
+    return batt.data
+
+
+async def verify_battery(cam: WirelessGoPro) -> tuple[bool, int]:
+    """Check if battery is above 20%."""
+
+    batt = await get_camera_battery(cam)
+    if batt <= 20:
+        return False, batt
+
+    return True, batt
 
 
 async def get_camera_remaining_storage(cam: WirelessGoPro) -> int:
     """Get remaining space on SD card, in kilobytes."""
 
-    return await (cam.ble_status.space_rem).get_value()
+    storage = await (cam.ble_status.space_rem).get_value()
+    return storage.data
+
+
+async def verify_storage(cam: WirelessGoPro) -> tuple[bool, int]:
+    """Check if storage is above 1 GB."""
+
+    storage = await get_camera_remaining_storage(cam)
+    if storage <= 1E6:
+        return False, storage
+
+    return True, storage
 
 
 async def connected_camera_table(connected_cameras: dict[str, WirelessGoPro]) -> None:
@@ -87,8 +109,8 @@ async def connected_camera_table(connected_cameras: dict[str, WirelessGoPro]) ->
         sdcard = await get_camera_remaining_storage(camera)
         table.add_row(
             name,
-            str(batt.data) + "%",
-            str(sdcard.data / 1000)
+            str(batt) + "%",
+            str(sdcard / 1000)
         )
 
     console.print(table)
@@ -229,7 +251,11 @@ async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_f
 
 
 async def ready_to_record(connected_cameras: dict[str, WirelessGoPro]) -> bool:
-    """Make sure cameras are ready to receive commands.
+    """Make sure cameras are ready to start recording.
+
+    This includes checking for battery life and SD card space remaining, to
+    prevent starting a recording where the camera might run out of battery or
+    SD card space.
 
     Parameters
     ----------
@@ -239,23 +265,56 @@ async def ready_to_record(connected_cameras: dict[str, WirelessGoPro]) -> bool:
     """
 
     if connected_cameras:
-        not_ready = 0
+        not_ready: int = 0
         for name, cam in connected_cameras.items():
-            logging.info(f"Check if {name} is ready...")
-            ready = False
+            logging.info(f"Checking if {name} is ready...")
+            ready: bool = False
+            batt_ready: bool = False
+            sdcard_ready: bool = False
+
             for _ in range(10):
-                status = await cam.ble_status.system_ready.get_value()
+                status = await (cam.ble_status.system_ready).get_value()
                 if status:
                     ready = True
+                    batt_ready, batt_percent = await verify_battery(cam)
+                    sdcard_ready, sdcard_remaining = await verify_storage(cam)
                     break
                 await asyncio.sleep(1)
-            if ready:
-                logging.info(f"{name} is ready.")
+
+            if (ready, batt_ready, sdcard_ready) == (True, True, True):
+                logging.info(
+                    f"{name} is ready, the battery is at {batt_percent}%, and the SD card has"
+                    f" {sdcard_remaining} kb remaining."
+                )
                 console.print(f"{name} is ready!")
+            elif (ready, batt_ready, sdcard_ready) == (True, True, False):
+                not_ready += 1
+                logging.info(
+                    f"{name} is ready, the battery is at {batt_percent}%, and the SD card has"
+                    f" {sdcard_remaining} kb remaining."
+                )
+                console.print(
+                    f"{name} only has {sdcard_remaining / 1E6} GB remaining, quit the app and remove some of the video"
+                    " files before proceeding."
+                )
+            elif (ready, batt_ready, sdcard_ready) == (True, False, False):
+                not_ready += 1
+                logging.info(
+                    f"{name} is ready, the battery is at {batt_percent}%, and the SD card has"
+                    f" {sdcard_remaining} kb remaining."
+                )
+                console.print(
+                    f"{name} only has {sdcard_remaining / 1E6} GB remaining and the battery is at {batt_percent}%."
+                    " Quit the app, remove some of the video files, and change the battery before proceeding."
+                )
             else:
                 not_ready += 1
-                logging.info(f"{name} is not ready.")
-                console.print(f"Timed-out waiting for {name} to be ready. Try again.")
+                logging.info(
+                    f"{name} is not ready, the battery is at {batt_percent}%, and the SD card has {sdcard_remaining} kb"
+                    " remaining."
+                )
+                console.print(f"{name} is not ready. Please try again.")
+
         if not_ready != 0:
             return False
         else:
