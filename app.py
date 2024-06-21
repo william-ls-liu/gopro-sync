@@ -517,6 +517,9 @@ logging.basicConfig(
     format='%(asctime)s:%(levelname)s:%(message)s',
     level=logging.INFO
 )
+RELEASE_VERSION = 'v0.2.0'
+logging.info(f"Using gopro-sync version: {RELEASE_VERSION}.")
+
 console = Console()
 
 loop = asyncio.new_event_loop()
