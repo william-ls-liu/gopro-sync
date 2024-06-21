@@ -492,6 +492,7 @@ async def main() -> None:
             else:
                 console.print("No cameras currently connected")
 
+        # TODO Add help section, or maybe open up a separate help file
         elif first_action == "Help":
             console.print("Need to add help info")
 
