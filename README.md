@@ -46,6 +46,26 @@ pip install -r requirements.txt
     ```
 
 ## 2. Connect the cameras
-Type "Connect" into the prompt and press ENTER.
+Type *Connect* into the prompt and press ENTER. The app will conduct a Bluetooth scan and display a table of
+found cameras. You can choose to connect to *All* found cameras, select an individual camera to connect to, or choose not
+connect to any of the found cameras.
+
+> **Heads up!** If you are connecting a specific GoPro camera for the first time, you need to put that camera into
+> pairing mode. Consult the user manual for your specific camera model for instructions. After the initial connection is
+> complete, you do not need to enter pairing mode when reconnecting that camera.
 
 ![Connecting to cameras](https://github.com/william-ls-liu/gopro-sync/blob/main/images/connect_to_cameras.gif)
+
+## 3. Start a recording
+Once you have connected the desired cameras you are ready to start a recording. Type *Record* and then press ENTER. The
+app will verify that each GoPro is ready to start capturing video; if all connected cameras are ready then the app will
+begin listening for the start trigger (the PageDown keycode). The app is designed around a 
+[Logitech R400](https://www.logitech.com/en-us/products/presenters/r400-wireless-presenter.910-001354.html)
+presentation remote. When you press the slide forward button on the remote it sends the PageDown keycode.
+
+Pressing the slide forward button once will start a recording, and pressing it again will end the recording.
+
+> Pressing PageDown on a keyboard will also trigger a recording, but it has to be a dedicated PageDown key. If your
+> keyboard requires a modifier to be held, like Fn, to access the PageDown key then the recording will not start.
+
+![Recording](https://github.com/william-ls-liu/gopro-sync/blob/main/images/record.gif)
