@@ -3,7 +3,8 @@ gopro-sync is a simple command line interface (CLI) application to wirelessly op
 The application uses the [Open GoPro Python SDK](https://github.com/gopro/OpenGoPro/tree/main/demos/python/sdk_wireless_camera_control) to control the GoPro cameras and [Rich](https://github.com/Textualize/rich) to provide the
 CLI user interface.
 
-The application is intended to provide synchronized recording of multiple GoPro cameras.
+The application is intended synchronize the recording of multiple GoPro cameras with a
+[Mobility Lab](https://apdm.com/mobility/) gait analysis system.
 
 > **Heads up!** The application provides "synchronization" in the sense that it sends the command to trigger each
 > camera's shutter at the same time. The Open GoPro SDK utilizes **asyncio** to handle wireless communication with the
