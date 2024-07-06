@@ -63,9 +63,12 @@ begin listening for the start trigger (the PageDown keycode). The app is designe
 [Logitech R400](https://www.logitech.com/en-us/products/presenters/r400-wireless-presenter.910-001354.html)
 presentation remote. When you press the slide forward button on the remote it sends the PageDown keycode.
 
-Pressing the slide forward button once will start a recording, and pressing it again will end the recording.
+Pressing the slide forward button once will start a recording, and pressing it again will end the recording. Pressing
+PageDown on a keyboard will also trigger a recording, but it has to be a dedicated PageDown key. If your keyboard 
+requires a modifier to be held, like Fn, to access the PageDown key then the recording will not start.
 
-> Pressing PageDown on a keyboard will also trigger a recording, but it has to be a dedicated PageDown key. If your
-> keyboard requires a modifier to be held, like Fn, to access the PageDown key then the recording will not start.
+> **Heads up!** The application will trigger a recording upon receipt of a PageDown keycode, even if it is not in focus.
+
+
 
 ![Recording](https://github.com/william-ls-liu/gopro-sync/blob/main/images/record.gif)
