@@ -64,10 +64,10 @@ async def get_camera_battery(cam: WirelessGoPro) -> int:
 
 
 async def verify_battery(cam: WirelessGoPro) -> tuple[bool, int]:
-    """Check if battery is above 20%."""
+    """Check if battery is above 15%."""
 
     batt = await get_camera_battery(cam)
-    if batt <= 20:
+    if batt <= 15:
         return False, batt
 
     return True, batt
