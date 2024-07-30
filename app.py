@@ -455,7 +455,7 @@ async def main() -> None:
     while running:
         first_action = Prompt.ask(
             "What would you like to do?",
-            choices=["Connect", "Disconnect", "View", "Record", "Help", "Quit"]
+            choices=["Connect", "Disconnect", "View", "Record", "Quit"]
         )
         logging.info(f"First action prompt was displayed, response was {first_action}.")
 
@@ -491,10 +491,6 @@ async def main() -> None:
                     console.print("At least one of the cameras is not ready to receive commands. Try again.")
             else:
                 console.print("No cameras currently connected")
-
-        # TODO Add help section, or maybe open up a separate help file
-        elif first_action == "Help":
-            console.print("Need to add help info")
 
         elif first_action == "Quit":
             await disconnect_cameras(connected_cameras, quit_flag=True)
