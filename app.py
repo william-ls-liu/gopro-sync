@@ -400,9 +400,18 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
         connected cameras.
     """
 
-    # Get the value of the Anti-Flicker setting
+    def _check_response(resp: GoProResp, setting: str, name: str, retry: int) -> bool:
+        if resp.status != constants.ErrorCode.SUCCESS:
+            logging.error(f"{name} did not succeed in changing the {setting} on try #{retry + 1}.")
+            return False
+
+        logging.info(f"{name} changed {setting} successfully on try #{retry + 1}.")
+        return True
+
+    # Get the values of the Anti-Flicker and Field of View settings
     anti_flicker_60: list = []
     anti_flicker_50: list = []
+    fov: dict = {}
     for name, cam in connected_cameras.items():
         resp = await cam.ble_setting.anti_flicker.get_value()
         if resp.data == Params.AntiFlicker.HZ_60:
@@ -412,6 +421,10 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
         else:
             logging.error(f"Could not get Anti-Flicker value for {name}.")
             console.print(f"Could not get Anti-Flicker value for {name}.")
+
+        resp = await cam.ble_setting.video_field_of_view.get_value()
+        if resp.data != Params.VideoFOV.LINEAR:
+            fov[name] = resp.data
 
     anti_flicker_setting = None
     if len(anti_flicker_60) > 0 and len(anti_flicker_50) > 0:
@@ -426,6 +439,26 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
         )
         anti_flicker_setting = Params.AntiFlicker.HZ_60 if prompt == "60" else Params.AntiFlicker.HZ_50
 
+    if fov:
+        for name in fov:
+            console.print(f"[bold blue]Heads up![/bold blue] {name} is using {fov[name]} field of view.")
+            prompt = Prompt.ask(
+                "Do you want to switch to the default (linear) field of view?",
+                console=console,
+                choices=["Yes", "No"]
+            )
+            if prompt == "Yes":
+                for i in range(retries):
+                    resp = await (connected_cameras[name].ble_setting.video_field_of_view.set(Params.VideoFOV.LINEAR))
+                    if _check_response(resp, 'video_field_of_view', name, i):
+                        console.print(f"Successfully changed {name} to linear field of view.")
+                        break
+                    if i == (retries - 1):
+                        logging.warning(f"{name} did not succeed in changing the field of view.")
+                        console.print(
+                            f"{name} did not succeed in changing the field of view. Try re-connecting to the cameras."
+                        )
+
     # Standard settings
     settings = {
         'load_preset_group': Params.PresetGroup.VIDEO,
@@ -434,21 +467,12 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
         'video_aspect_ratio': Params.VideoAspectRatio.RATIO_16_9,
         'resolution': Params.Resolution.RES_1080,
         'fps': Params.FPS.FPS_60,
-        'video_field_of_view': Params.VideoFOV.LINEAR,
         'hypersmooth': Params.HypersmoothMode.OFF,
         'hindsight': Params.Hindsight.OFF,
         'bit_depth': Params.BitDepth.BIT_8,
         'bit_rate': Params.BitRate.HIGH,
         'auto_off': Params.AutoOff.MIN_30
     }
-
-    def _check_response(resp: GoProResp, setting: str, name: str, retry: int) -> bool:
-        if resp.status != constants.ErrorCode.SUCCESS:
-            logging.error(f"{name} did not succeed in changing the {setting} on try #{retry + 1}.")
-            return False
-
-        logging.info(f"{name} changed {setting} successfully on try #{retry + 1}.")
-        return True
 
     with console.status("Verifying camera settings...", spinner='bouncingBar'):
         for name, cam in connected_cameras.items():
