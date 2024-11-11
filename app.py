@@ -400,6 +400,32 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
         connected cameras.
     """
 
+    # Get the value of the Anti-Flicker setting
+    anti_flicker_60: list = []
+    anti_flicker_50: list = []
+    for name, cam in connected_cameras.items():
+        resp = await cam.ble_setting.anti_flicker.get_value()
+        if resp.data == Params.AntiFlicker.HZ_60:
+            anti_flicker_60.append(name)
+        elif resp.data == Params.AntiFlicker.HZ_50:
+            anti_flicker_50.append(name)
+        else:
+            logging.error(f"Could not get Anti-Flicker value for {name}.")
+            console.print(f"Could not get Anti-Flicker value for {name}.")
+
+    anti_flicker_setting = None
+    if len(anti_flicker_60) > 0 and len(anti_flicker_50) > 0:
+        console.print("[bold red]Warning![/bold red] Multiple Anti-Flicker settings detected.")
+        console.print(f"The following cameras are using 60Hz Anti-Flicker: {anti_flicker_60}.")
+        console.print(f"The following cameras are using 50Hz Anti-Flicker: {anti_flicker_50}.")
+        # Ask user which Anti-Flicker setting to use
+        prompt: str = Prompt.ask(
+            "Which Anti-Flicker setting do you want to use?",
+            console=console,
+            choices=["60", "50"]
+        )
+        anti_flicker_setting = Params.AntiFlicker.HZ_60 if prompt == "60" else Params.AntiFlicker.HZ_50
+
     # Standard settings
     settings = {
         'load_preset_group': Params.PresetGroup.VIDEO,
@@ -426,6 +452,11 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
 
     with console.status("Verifying camera settings...", spinner='bouncingBar'):
         for name, cam in connected_cameras.items():
+            if anti_flicker_setting is not None:
+                resp = await cam.ble_setting.anti_flicker.set(anti_flicker_setting)
+                if not _check_response(resp, "anti_flicker", name, 0):
+                    logging.warning(f"{name} did not succeed in changing the anti_flicker.")
+                    console.print(f"{name} did not succeed in changing the anti_flicker.")
             for setting in settings:
                 for i in range(retries):
                     if setting == 'load_preset_group':  # ensure camera is in video mode
