@@ -1,17 +1,18 @@
 # Author: William Liu <liwi@ohsu.edu>
 
-from rich.console import Console
-from rich.prompt import Prompt, Confirm
-from rich.table import Table
-from open_gopro import WirelessGoPro, Params, constants, GoProResp
-from open_gopro.exceptions import FailedToFindDevice, ConnectFailed
 import asyncio
-from bleak import BleakScanner
-from bleak.backends.device import BLEDevice
 import logging
-from pynput import keyboard
 import os
 from datetime import datetime
+
+from bleak import BleakScanner
+from bleak.backends.device import BLEDevice
+from open_gopro import GoProResp, Params, WirelessGoPro, constants
+from open_gopro.exceptions import ConnectFailed, FailedToFindDevice
+from pynput import keyboard
+from rich.console import Console
+from rich.prompt import Confirm, Prompt
+from rich.table import Table
 
 
 async def scan_for_cameras() -> dict[str, BLEDevice]:
@@ -30,7 +31,9 @@ async def scan_for_cameras() -> dict[str, BLEDevice]:
             logger.info(f"Discovered {device}")
             devices[device.name] = device
 
-    async with BleakScanner(scan_callback, service_uuids=['0000fea6-0000-1000-8000-00805f9b34fb']):
+    async with BleakScanner(
+        scan_callback, service_uuids=["0000fea6-0000-1000-8000-00805f9b34fb"]
+    ):
         for i in range(1, 100):
             await asyncio.sleep(0.1)
 
@@ -50,9 +53,7 @@ def device_table(devices: dict[str, BLEDevice]) -> None:
     table.add_column("Device Name")
     table.add_column("Bluetooth Address", style="dim")
     for name, device in devices.items():
-        table.add_row(
-            name, device.address
-        )
+        table.add_row(name, device.address)
     console.print(table)
 
 
@@ -84,7 +85,7 @@ async def verify_storage(cam: WirelessGoPro) -> tuple[bool, int]:
     """Check if storage is above 1 GB."""
 
     storage = await get_camera_remaining_storage(cam)
-    if storage <= 1E6:
+    if storage <= 1e6:
         return False, storage
 
     return True, storage
@@ -107,11 +108,7 @@ async def connected_camera_table(connected_cameras: dict[str, WirelessGoPro]) ->
     for name, camera in connected_cameras.items():
         batt = await get_camera_battery(camera)
         sdcard = await get_camera_remaining_storage(camera)
-        table.add_row(
-            name,
-            str(batt) + "%",
-            str(sdcard / 1000)
-        )
+        table.add_row(name, str(batt) + "%", str(sdcard / 1000))
 
     console.print(table)
 
@@ -137,7 +134,7 @@ def prompt_device_selection(devices: dict[str, BLEDevice]) -> str | None:
         prompt = Prompt.ask(
             "Do you want to connect to any of the found devices?",
             console=console,
-            choices=choices
+            choices=choices,
         )
 
         return prompt
@@ -154,9 +151,9 @@ def prompt_device_selection(devices: dict[str, BLEDevice]) -> str | None:
 
 
 async def connect_camera(
-        found_devices: dict[str, BLEDevice],
-        connected_cameras: dict[str, WirelessGoPro],
-        connect_prompt: str
+    found_devices: dict[str, BLEDevice],
+    connected_cameras: dict[str, WirelessGoPro],
+    connect_prompt: str,
 ) -> None:
     """Connect to camera(s) based on user input.
 
@@ -178,7 +175,7 @@ async def connect_camera(
         while retry:
             missed_connections: list = []
             retry = False
-            with console.status("Connecting to cameras...", spinner='bouncingBar'):
+            with console.status("Connecting to cameras...", spinner="bouncingBar"):
                 if connect_prompt == "All":
                     for name in found_devices.keys():
                         if name in connected_cameras:
@@ -201,7 +198,9 @@ async def connect_camera(
                         retry = False
                     else:
                         try:
-                            cam = WirelessGoPro(target=connect_prompt, enable_wifi=False)
+                            cam = WirelessGoPro(
+                                target=connect_prompt, enable_wifi=False
+                            )
                             await cam.open()
                             console.print(f"Connected to {connect_prompt}")
                             connected_cameras[connect_prompt] = cam
@@ -217,7 +216,9 @@ async def connect_camera(
                 )
 
 
-async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_flag: bool = False) -> None:
+async def disconnect_cameras(
+    connected_cameras: dict[str, WirelessGoPro], quit_flag: bool = False
+) -> None:
     """Disconnect all currently connected GoPro cameras.
 
     It is very important to call the close() method on each WirelessGoPro
@@ -236,7 +237,7 @@ async def disconnect_cameras(connected_cameras: dict[str, WirelessGoPro], quit_f
     """
 
     if connected_cameras:
-        with console.status("Disconnecting from cameras...", spinner='bouncingBar'):
+        with console.status("Disconnecting from cameras...", spinner="bouncingBar"):
             disconnected = list()
             for cam in connected_cameras:
                 await connected_cameras[cam].close()
@@ -334,7 +335,9 @@ async def ready_to_record(connected_cameras: dict[str, WirelessGoPro]) -> bool:
         return False
 
 
-async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | None = None) -> None:
+async def record(
+    connected_cameras: dict[str, WirelessGoPro], timeout: float | None = None
+) -> None:
     """Listen for the Page Down keycode to start/stop a recording.
 
     Parameters
@@ -354,7 +357,7 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
     while not correct_key:
         with console.status(
             "Switch application focus to Mobility Lab, then press > on remote to start recording. Press ESC to cancel.",
-            spinner='bouncingBar'
+            spinner="bouncingBar",
         ):
             logging.info("Starting keyboard listener, waiting for start trigger.")
             with keyboard.Events() as events:
@@ -363,9 +366,15 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
         if event.key == keyboard.Key.page_down:
             correct_key = True
             tasks = []
-            async with asyncio.TaskGroup() as tg:  # once context manager exits all tasks are awaited
+            async with (
+                asyncio.TaskGroup() as tg
+            ):  # once context manager exits all tasks are awaited
                 for cam in connected_cameras.values():
-                    tasks.append(tg.create_task(cam.ble_command.set_shutter(shutter=Params.Toggle.ENABLE)))
+                    tasks.append(
+                        tg.create_task(
+                            cam.ble_command.set_shutter(shutter=Params.Toggle.ENABLE)
+                        )
+                    )
             logging.info("Recording started.")
         elif event.key == keyboard.Key.esc:
             console.print("Recording cancelled.")
@@ -375,7 +384,9 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
     # Wait for stop trigger
     correct_key = False
     while not correct_key:
-        with console.status("Recording... Press > on remote to stop recording.", spinner='bouncingBar'):
+        with console.status(
+            "Recording... Press > on remote to stop recording.", spinner="bouncingBar"
+        ):
             logging.info("Starting keyboard listener, waiting for stop trigger.")
             with keyboard.Events() as events:
                 event = events.get(timeout)
@@ -383,12 +394,20 @@ async def record(connected_cameras: dict[str, WirelessGoPro], timeout: float | N
         if event.key == keyboard.Key.page_down:
             correct_key = True
             tasks = []
-            async with asyncio.TaskGroup() as tg:  # once context manager exits all tasks are awaited
+            async with (
+                asyncio.TaskGroup() as tg
+            ):  # once context manager exits all tasks are awaited
                 for cam in connected_cameras.values():
-                    tasks.append(tg.create_task(cam.ble_command.set_shutter(shutter=Params.Toggle.DISABLE)))
+                    tasks.append(
+                        tg.create_task(
+                            cam.ble_command.set_shutter(shutter=Params.Toggle.DISABLE)
+                        )
+                    )
 
 
-async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], retries: int = 5) -> None:
+async def enforce_camera_settings(
+    connected_cameras: dict[str, WirelessGoPro], retries: int = 5
+) -> None:
     """Ensure all cameras are recording with the same video settings.
 
     The standard settings for all users are:
@@ -402,7 +421,9 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
 
     def _check_response(resp: GoProResp, setting: str, name: str, retry: int) -> bool:
         if resp.status != constants.ErrorCode.SUCCESS:
-            logging.error(f"{name} did not succeed in changing the {setting} on try #{retry + 1}.")
+            logging.error(
+                f"{name} did not succeed in changing the {setting} on try #{retry + 1}."
+            )
             return False
 
         logging.info(f"{name} changed {setting} successfully on try #{retry + 1}.")
@@ -427,16 +448,24 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
             fov[name] = resp.data
 
     if len(anti_flicker_60) > 0 and len(anti_flicker_50) > 0:
-        console.print("[bold red]Warning![/bold red] Multiple Anti-Flicker settings detected.")
-        console.print(f"The following cameras are using 60Hz Anti-Flicker: {anti_flicker_60}.")
-        console.print(f"The following cameras are using 50Hz Anti-Flicker: {anti_flicker_50}.")
+        console.print(
+            "[bold red]Warning![/bold red] Multiple Anti-Flicker settings detected."
+        )
+        console.print(
+            f"The following cameras are using 60Hz Anti-Flicker: {anti_flicker_60}."
+        )
+        console.print(
+            f"The following cameras are using 50Hz Anti-Flicker: {anti_flicker_50}."
+        )
         # Ask user which Anti-Flicker setting to use
         prompt: str = Prompt.ask(
             "Which Anti-Flicker setting do you want to use?",
             console=console,
-            choices=["60", "50"]
+            choices=["60", "50"],
         )
-        anti_flicker_setting = Params.AntiFlicker.HZ_60 if prompt == "60" else Params.AntiFlicker.HZ_50
+        anti_flicker_setting = (
+            Params.AntiFlicker.HZ_60 if prompt == "60" else Params.AntiFlicker.HZ_50
+        )
     elif len(anti_flicker_50) == len(connected_cameras):
         anti_flicker_setting = Params.AntiFlicker.HZ_50
     else:
@@ -444,52 +473,68 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
 
     if fov:
         for name in fov:
-            console.print(f"[bold blue]Heads up![/bold blue] {name} is using {fov[name]} field of view.")
+            console.print(
+                f"[bold blue]Heads up![/bold blue] {name} is using {fov[name]} field of view."
+            )
             prompt = Prompt.ask(
                 "Do you want to switch to the default (linear) field of view?",
                 console=console,
-                choices=["Yes", "No"]
+                choices=["Yes", "No"],
             )
             if prompt == "Yes":
                 for i in range(retries):
-                    resp = await (connected_cameras[name].ble_setting.video_field_of_view.set(Params.VideoFOV.LINEAR))
-                    if _check_response(resp, 'video_field_of_view', name, i):
-                        console.print(f"Successfully changed {name} to linear field of view.")
+                    resp = await connected_cameras[
+                        name
+                    ].ble_setting.video_field_of_view.set(Params.VideoFOV.LINEAR)
+                    if _check_response(resp, "video_field_of_view", name, i):
+                        console.print(
+                            f"Successfully changed {name} to linear field of view."
+                        )
                         break
                     if i == (retries - 1):
-                        logging.warning(f"{name} did not succeed in changing the field of view.")
+                        logging.warning(
+                            f"{name} did not succeed in changing the field of view."
+                        )
                         console.print(
                             f"{name} did not succeed in changing the field of view. Try re-connecting to the cameras."
                         )
 
     # Standard settings
     settings = {
-        'load_preset_group': Params.PresetGroup.VIDEO,
-        'anti_flicker': anti_flicker_setting,
-        'camera_ux_mode': Params.CameraUxMode.PRO,
-        'video_profile': Params.VideoProfile.STANDARD,
-        'video_aspect_ratio': Params.VideoAspectRatio.RATIO_16_9,
-        'resolution': Params.Resolution.RES_1080,
-        'fps': Params.FPS.FPS_30 if anti_flicker_setting == Params.AntiFlicker.HZ_60 else Params.FPS.FPS_50,
-        'hypersmooth': Params.HypersmoothMode.OFF,
-        'hindsight': Params.Hindsight.OFF,
-        'bit_depth': Params.BitDepth.BIT_8,
-        'bit_rate': Params.BitRate.HIGH,
-        'auto_off': Params.AutoOff.MIN_30
+        "load_preset_group": Params.PresetGroup.VIDEO,
+        "anti_flicker": anti_flicker_setting,
+        "camera_ux_mode": Params.CameraUxMode.PRO,
+        "video_profile": Params.VideoProfile.STANDARD,
+        "video_aspect_ratio": Params.VideoAspectRatio.RATIO_16_9,
+        "resolution": Params.Resolution.RES_1080,
+        "fps": Params.FPS.FPS_30
+        if anti_flicker_setting == Params.AntiFlicker.HZ_60
+        else Params.FPS.FPS_50,
+        "hypersmooth": Params.HypersmoothMode.OFF,
+        "hindsight": Params.Hindsight.OFF,
+        "bit_depth": Params.BitDepth.BIT_8,
+        "bit_rate": Params.BitRate.HIGH,
+        "auto_off": Params.AutoOff.MIN_30,
     }
 
-    with console.status("Verifying camera settings...", spinner='bouncingBar'):
+    with console.status("Verifying camera settings...", spinner="bouncingBar"):
         for name, cam in connected_cameras.items():
             for setting in settings:
                 for i in range(retries):
-                    if setting == 'load_preset_group':  # ensure camera is in video mode
-                        resp = await (cam.ble_command.load_preset_group(group=settings[setting]))
+                    if setting == "load_preset_group":  # ensure camera is in video mode
+                        resp = await cam.ble_command.load_preset_group(
+                            group=settings[setting]
+                        )
                     else:
-                        resp = await (getattr(cam.ble_setting, setting)).set(settings[setting])
+                        resp = await (getattr(cam.ble_setting, setting)).set(
+                            settings[setting]
+                        )
                     if _check_response(resp, setting, name, i):
                         break
                     if i == (retries - 1):
-                        logging.warning(f"{name} did not succeed in changing the {setting}.")
+                        logging.warning(
+                            f"{name} did not succeed in changing the {setting}."
+                        )
                         console.print(
                             f"{name} did not succeed in changing the {setting}. Try re-connecting to the cameras."
                         )
@@ -509,19 +554,21 @@ async def main() -> None:
     while running:
         first_action = Prompt.ask(
             "What would you like to do?",
-            choices=["Connect", "Disconnect", "View", "Record", "Quit"]
+            choices=["Connect", "Disconnect", "View", "Record", "Quit"],
         )
         logging.info(f"First action prompt was displayed, response was {first_action}.")
 
         if first_action == "Connect":
             found_devices: dict[str, BLEDevice] = dict()
-            with console.status("Scanning for cameras..", spinner='bouncingBar'):
+            with console.status("Scanning for cameras..", spinner="bouncingBar"):
                 found_devices = await scan_for_cameras()
             logging.info(f"Scanning found the following cameras: {found_devices}.")
             if found_devices:
                 device_table(found_devices)
             connect_prompt = prompt_device_selection(found_devices)
-            logging.info(f"The connect prompt was displayed, user chose: {connect_prompt}.")
+            logging.info(
+                f"The connect prompt was displayed, user chose: {connect_prompt}."
+            )
             if connect_prompt is not None:
                 await connect_camera(found_devices, connected_cameras, connect_prompt)
                 await enforce_camera_settings(connected_cameras)
@@ -542,7 +589,9 @@ async def main() -> None:
                 if ready:
                     await record(connected_cameras)
                 else:
-                    console.print("At least one of the cameras is not ready to receive commands. Try again.")
+                    console.print(
+                        "At least one of the cameras is not ready to receive commands. Try again."
+                    )
             else:
                 console.print("No cameras currently connected")
 
@@ -555,20 +604,20 @@ async def main() -> None:
 
 
 cwd = os.getcwd()
-log_folder = os.path.join(cwd, 'log')
+log_folder = os.path.join(cwd, "log")
 if not os.path.exists(log_folder):
     os.mkdir(log_folder)
 now = datetime.now()
-now_str = now.strftime('%Y-%m-%d_%H-%M-%S')
-log_fname = os.path.join(log_folder, f'{now_str}.log')
+now_str = now.strftime("%Y-%m-%d_%H-%M-%S")
+log_fname = os.path.join(log_folder, f"{now_str}.log")
 logger = logging.getLogger()
 logging.basicConfig(
     filename=log_fname,
-    encoding='utf-8',
-    format='%(asctime)s:%(levelname)s:%(message)s',
-    level=logging.INFO
+    encoding="utf-8",
+    format="%(asctime)s:%(levelname)s:%(message)s",
+    level=logging.INFO,
 )
-RELEASE_VERSION = 'v0.2.2'
+RELEASE_VERSION = "v0.2.2"
 logging.info(f"Using gopro-sync version: {RELEASE_VERSION}.")
 
 console = Console()
