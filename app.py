@@ -617,7 +617,7 @@ logging.basicConfig(
     format="%(asctime)s:%(levelname)s:%(message)s",
     level=logging.INFO,
 )
-RELEASE_VERSION = "v0.2.2"
+RELEASE_VERSION = "v0.2.3"
 logging.info(f"Using gopro-sync version: {RELEASE_VERSION}.")
 
 console = Console()
