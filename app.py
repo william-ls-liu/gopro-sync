@@ -470,7 +470,7 @@ async def enforce_camera_settings(connected_cameras: dict[str, WirelessGoPro], r
         'video_profile': Params.VideoProfile.STANDARD,
         'video_aspect_ratio': Params.VideoAspectRatio.RATIO_16_9,
         'resolution': Params.Resolution.RES_1080,
-        'fps': Params.FPS.FPS_60 if anti_flicker_setting == Params.AntiFlicker.HZ_60 else Params.FPS.FPS_50,
+        'fps': Params.FPS.FPS_30 if anti_flicker_setting == Params.AntiFlicker.HZ_60 else Params.FPS.FPS_50,
         'hypersmooth': Params.HypersmoothMode.OFF,
         'hindsight': Params.Hindsight.OFF,
         'bit_depth': Params.BitDepth.BIT_8,
