@@ -7,7 +7,7 @@ from datetime import datetime
 
 from bleak import BleakScanner
 from bleak.backends.device import BLEDevice
-from open_gopro import GoProResp, Params, WirelessGoPro, constants
+from open_gopro import GoProResp, WirelessGoPro, constants, proto
 from open_gopro.exceptions import ConnectFailed, FailedToFindDevice
 from pynput import keyboard
 from rich.console import Console
@@ -57,10 +57,17 @@ def device_table(devices: dict[str, BLEDevice]) -> None:
     console.print(table)
 
 
+async def get_camera_model(cam: WirelessGoPro) -> str:
+    """Get the camera model number."""
+
+    camera_info = await cam.ble_command.get_hardware_info()
+    return camera_info.data.model_name
+
+
 async def get_camera_battery(cam: WirelessGoPro) -> int:
     """Get current battery level in percent."""
 
-    batt = await (cam.ble_status.int_batt_per).get_value()
+    batt = await (cam.ble_status.internal_battery_percentage).get_value()
     return batt.data
 
 
@@ -77,7 +84,7 @@ async def verify_battery(cam: WirelessGoPro) -> tuple[bool, int]:
 async def get_camera_remaining_storage(cam: WirelessGoPro) -> int:
     """Get remaining space on SD card, in kilobytes."""
 
-    storage = await (cam.ble_status.space_rem).get_value()
+    storage = await (cam.ble_status.sd_card_remaining).get_value()
     return storage.data
 
 
@@ -147,7 +154,7 @@ def prompt_device_selection(devices: dict[str, BLEDevice]) -> str | None:
             3) If this is the first time connecting to a camera, it must be in pairing mode"""
         )
 
-        return
+        return "None"
 
 
 async def connect_camera(
@@ -273,9 +280,10 @@ async def ready_to_record(connected_cameras: dict[str, WirelessGoPro]) -> bool:
             batt_ready: bool = False
             sdcard_ready: bool = False
 
-            for _ in range(10):
-                status = await (cam.ble_status.system_ready).get_value()
-                if status:
+            for i in range(10):
+                status = await (cam.ble_status.ready).get_value()
+                logging.info(f"Status is {str(status)} on retry# {i + 1}.")
+                if (status.status == constants.ErrorCode.SUCCESS) and (status.data):
                     ready = True
                     batt_ready, batt_percent = await verify_battery(cam)
                     sdcard_ready, sdcard_remaining = await verify_storage(cam)
@@ -295,7 +303,7 @@ async def ready_to_record(connected_cameras: dict[str, WirelessGoPro]) -> bool:
                     f" {sdcard_remaining} kb remaining."
                 )
                 console.print(
-                    f"{name} only has {sdcard_remaining / 1E6} GB remaining, quit the app and remove some of the video"
+                    f"{name} only has {sdcard_remaining / 1e6} GB remaining, quit the app and remove some of the video"
                     " files before proceeding."
                 )
             elif (ready, batt_ready, sdcard_ready) == (True, False, False):
@@ -305,7 +313,7 @@ async def ready_to_record(connected_cameras: dict[str, WirelessGoPro]) -> bool:
                     f" {sdcard_remaining} kb remaining."
                 )
                 console.print(
-                    f"{name} only has {sdcard_remaining / 1E6} GB remaining and the battery is at {batt_percent}%."
+                    f"{name} only has {sdcard_remaining / 1e6} GB remaining and the battery is at {batt_percent}%."
                     " Quit the app, remove some of the video files, and change the battery before proceeding."
                 )
             elif (ready, batt_ready, sdcard_ready) == (True, False, True):
@@ -320,10 +328,7 @@ async def ready_to_record(connected_cameras: dict[str, WirelessGoPro]) -> bool:
                 )
             else:
                 not_ready += 1
-                logging.info(
-                    f"{name} is not ready, the battery is at {batt_percent}%, and the SD card has {sdcard_remaining} kb"
-                    " remaining."
-                )
+                logging.info(f"{name} is not ready.")
                 console.print(f"{name} is not ready. Please try again.")
 
         if not_ready != 0:
@@ -372,7 +377,7 @@ async def record(
                 for cam in connected_cameras.values():
                     tasks.append(
                         tg.create_task(
-                            cam.ble_command.set_shutter(shutter=Params.Toggle.ENABLE)
+                            cam.ble_command.set_shutter(shutter=constants.Toggle.ENABLE)
                         )
                     )
             logging.info("Recording started.")
@@ -400,7 +405,9 @@ async def record(
                 for cam in connected_cameras.values():
                     tasks.append(
                         tg.create_task(
-                            cam.ble_command.set_shutter(shutter=Params.Toggle.DISABLE)
+                            cam.ble_command.set_shutter(
+                                shutter=constants.Toggle.DISABLE
+                            )
                         )
                     )
 
@@ -419,106 +426,31 @@ async def enforce_camera_settings(
         connected cameras.
     """
 
-    def _check_response(resp: GoProResp, setting: str, name: str, retry: int) -> bool:
-        if resp.status != constants.ErrorCode.SUCCESS:
-            logging.error(
-                f"{name} did not succeed in changing the {setting} on try #{retry + 1}."
-            )
-            return False
-
-        logging.info(f"{name} changed {setting} successfully on try #{retry + 1}.")
-        return True
-
-    # Get the values of the Anti-Flicker and Field of View settings
-    anti_flicker_60: list = []
-    anti_flicker_50: list = []
-    fov: dict = {}
     for name, cam in connected_cameras.items():
-        resp = await cam.ble_setting.anti_flicker.get_value()
-        if resp.data == Params.AntiFlicker.HZ_60:
-            anti_flicker_60.append(name)
-        elif resp.data == Params.AntiFlicker.HZ_50:
-            anti_flicker_50.append(name)
+        # Load the video preset group to ensure we are in video mode
+        for i in range(retries):
+            resp = await cam.ble_command.load_preset_group(
+                group=proto.EnumPresetGroup.PRESET_GROUP_ID_VIDEO
+            )
+            if _check_setting_set_response(resp, "load_preset_group", name, i):
+                break
+            if i == (retries - 1):
+                logging.warning(
+                    f"{name} did not succeed in changing the preset group to Video."
+                )
+                console.print(
+                    f"{name} did not succeed in changing the preset group to Video. Try re-connecting to the cameras."
+                )
+
+        model = await get_camera_model(cam)
+        if model == "HERO13 Black":
+            settings = await _hero13_settings(name, cam, retries)
+        elif model == "HERO12 Black":
+            settings = await _hero12_settings(name, cam, retries)
         else:
-            logging.error(f"Could not get Anti-Flicker value for {name}.")
-            console.print(f"Could not get Anti-Flicker value for {name}.")
+            raise ValueError(f"Camera model {model} not supported!")
 
-        resp = await cam.ble_setting.video_field_of_view.get_value()
-        if resp.data != Params.VideoFOV.LINEAR:
-            fov[name] = resp.data
-
-    if len(anti_flicker_60) > 0 and len(anti_flicker_50) > 0:
-        console.print(
-            "[bold red]Warning![/bold red] Multiple Anti-Flicker settings detected."
-        )
-        console.print(
-            f"The following cameras are using 60Hz Anti-Flicker: {anti_flicker_60}."
-        )
-        console.print(
-            f"The following cameras are using 50Hz Anti-Flicker: {anti_flicker_50}."
-        )
-        # Ask user which Anti-Flicker setting to use
-        prompt: str = Prompt.ask(
-            "Which Anti-Flicker setting do you want to use?",
-            console=console,
-            choices=["60", "50"],
-        )
-        anti_flicker_setting = (
-            Params.AntiFlicker.HZ_60 if prompt == "60" else Params.AntiFlicker.HZ_50
-        )
-    elif len(anti_flicker_50) == len(connected_cameras):
-        anti_flicker_setting = Params.AntiFlicker.HZ_50
-    else:
-        anti_flicker_setting = Params.AntiFlicker.HZ_60
-
-    if fov:
-        for name in fov:
-            console.print(
-                f"[bold blue]Heads up![/bold blue] {name} is using {fov[name]} field of view."
-            )
-            prompt = Prompt.ask(
-                "Do you want to switch to the default (linear) field of view?",
-                console=console,
-                choices=["Yes", "No"],
-            )
-            if prompt == "Yes":
-                for i in range(retries):
-                    resp = await connected_cameras[
-                        name
-                    ].ble_setting.video_field_of_view.set(Params.VideoFOV.LINEAR)
-                    if _check_response(resp, "video_field_of_view", name, i):
-                        console.print(
-                            f"Successfully changed {name} to linear field of view."
-                        )
-                        break
-                    if i == (retries - 1):
-                        logging.warning(
-                            f"{name} did not succeed in changing the field of view."
-                        )
-                        console.print(
-                            f"{name} did not succeed in changing the field of view. Try re-connecting to the cameras."
-                        )
-
-    # Standard settings
-    settings = {
-        "load_preset_group": Params.PresetGroup.VIDEO,
-        "anti_flicker": anti_flicker_setting,
-        "camera_ux_mode": Params.CameraUxMode.PRO,
-        "video_profile": Params.VideoProfile.STANDARD,
-        "video_aspect_ratio": Params.VideoAspectRatio.RATIO_16_9,
-        "resolution": Params.Resolution.RES_1080,
-        "fps": Params.FPS.FPS_30
-        if anti_flicker_setting == Params.AntiFlicker.HZ_60
-        else Params.FPS.FPS_50,
-        "hypersmooth": Params.HypersmoothMode.OFF,
-        "hindsight": Params.Hindsight.OFF,
-        "bit_depth": Params.BitDepth.BIT_8,
-        "bit_rate": Params.BitRate.HIGH,
-        "auto_off": Params.AutoOff.MIN_30,
-    }
-
-    with console.status("Verifying camera settings...", spinner="bouncingBar"):
-        for name, cam in connected_cameras.items():
+        with console.status("Verifying camera settings...", spinner="bouncingBar"):
             for setting in settings:
                 for i in range(retries):
                     if setting == "load_preset_group":  # ensure camera is in video mode
@@ -529,7 +461,7 @@ async def enforce_camera_settings(
                         resp = await (getattr(cam.ble_setting, setting)).set(
                             settings[setting]
                         )
-                    if _check_response(resp, setting, name, i):
+                    if _check_setting_set_response(resp, setting, name, i):
                         break
                     if i == (retries - 1):
                         logging.warning(
@@ -538,6 +470,154 @@ async def enforce_camera_settings(
                         console.print(
                             f"{name} did not succeed in changing the {setting}. Try re-connecting to the cameras."
                         )
+
+
+async def _hero12_settings(name: str, cam: WirelessGoPro, retries: int) -> dict:
+    # Check the Anti Flicker settings
+    success = False
+    for i in range(retries):
+        resp = await cam.ble_setting.anti_flicker.get_value()
+        if _check_setting_get_response(resp, "Anti_Flicker", name, i):
+            if resp.data == constants.settings.Anti_Flicker.NUM_60HZ:
+                fps = constants.settings.FramesPerSecond.NUM_30_0
+            elif resp.data == constants.settings.Anti_Flicker.NUM_50HZ:
+                fps = constants.settings.FramesPerSecond.NUM_50_0
+            else:
+                logging.error(
+                    f"Unknown value {resp.data} encountered for Anti_Flicker for {name}."
+                )
+            success = True
+            break
+    if not success:
+        logging.error(f"Could not get Anti_Flicker value for {name}.")
+
+    # Check the lens FOV, allow for using values other than the default (linear)
+    success = False
+    for i in range(retries):
+        resp = await cam.ble_setting.video_lens.get_value()
+        lens = resp.data
+        if _check_setting_get_response(resp, "Video_Lens", name, i):
+            if lens != constants.settings.VideoLens.LINEAR:
+                console.print(
+                    f"[bold blue]Heads up![/bold blue] {name} is using {str(resp.data)} field of view."
+                )
+                prompt = Prompt.ask(
+                    "Do you want to switch to the default (linear) field of view?",
+                    console=console,
+                    choices=["Yes", "No"],
+                )
+                if prompt == "Yes":
+                    lens = constants.settings.VideoLens.LINEAR
+            success = True
+            break
+    if not success:
+        logging.error(f"Could not get Video_Lens value for {name}.")
+
+    # Create settings dictionary
+    settings = {
+        "load_preset_group": proto.EnumPresetGroup.PRESET_GROUP_ID_VIDEO,  # video mode
+        "controls": constants.settings.Controls.PRO,
+        "profiles": constants.settings.Profiles.STANDARD,
+        "video_lens": lens,
+        "video_aspect_ratio": constants.settings.VideoAspectRatio.NUM_16_9,
+        "video_resolution": constants.settings.VideoResolution.NUM_1080,
+        "frames_per_second": fps,
+        "hypersmooth": constants.settings.Hypersmooth.OFF,
+        "hindsight": constants.settings.Hindsight.OFF,
+        "bit_depth": constants.settings.BitDepth.NUM_8_BIT,
+        "video_bit_rate": constants.settings.VideoBitRate.HIGH,
+        "auto_power_down": constants.settings.AutoPowerDown.NUM_30_MIN,
+    }
+
+    return settings
+
+
+async def _hero13_settings(name: str, cam: WirelessGoPro, retries: int) -> dict:
+    # Check the Anti Flicker settings
+    success = False
+    for i in range(retries):
+        resp = await cam.ble_setting.anti_flicker.get_value()
+        if _check_setting_get_response(resp, "Anti_Flicker", name, i):
+            if resp.data == constants.settings.Anti_Flicker.NTSC:
+                frame_rate = constants.settings.FrameRate.NUM_30_0
+            elif resp.data == constants.settings.Anti_Flicker.PAL:
+                frame_rate = constants.settings.FrameRate.NUM_50_0
+            else:
+                logging.error(
+                    f"Unknown value {resp.data} encountered for Anti_Flicker for {name}."
+                )
+            success = True
+            break
+    if not success:
+        logging.error(f"Could not get Anti_Flicker value for {name}.")
+
+    # Check the lens FOV, allow for using values other than the default (linear)
+    success = False
+    for i in range(retries):
+        resp = await cam.ble_setting.video_lens.get_value()
+        lens = resp.data
+        if _check_setting_get_response(resp, "Video_Lens", name, i):
+            if lens != constants.settings.VideoLens.LINEAR:
+                console.print(
+                    f"[bold blue]Heads up![/bold blue] {name} is using {str(resp.data)} field of view."
+                )
+                prompt = Prompt.ask(
+                    "Do you want to switch to the default (linear) field of view?",
+                    console=console,
+                    choices=["Yes", "No"],
+                )
+                if prompt == "Yes":
+                    lens = constants.settings.VideoLens.LINEAR
+            success = True
+            break
+    if not success:
+        logging.error(f"Could not get Video_Lens value for {name}.")
+
+    # Create settings dictionary
+    settings = {
+        "load_preset_group": proto.EnumPresetGroup.PRESET_GROUP_ID_VIDEO,  # video mode
+        "controls": constants.settings.Controls.PRO,
+        "profiles": constants.settings.Profiles.STANDARD,
+        "video_lens": lens,
+        "video_framing": constants.settings.VideoFraming.NUM_16_9,
+        "video_resolution": constants.settings.VideoResolution.NUM_1080,
+        "frame_rate": frame_rate,
+        "hypersmooth": constants.settings.Hypersmooth.OFF,
+        "hindsight": constants.settings.Hindsight.OFF,
+        "bit_depth": constants.settings.BitDepth.NUM_8_BIT,
+        "video_bit_rate": constants.settings.VideoBitRate.HIGH,
+        "auto_power_down": constants.settings.AutoPowerDown.NUM_30_MIN,
+    }
+
+    return settings
+
+
+def _check_setting_get_response(
+    resp: GoProResp, setting: str, name: str, retry: int
+) -> bool:
+    if resp.status != constants.ErrorCode.SUCCESS:
+        logging.error(
+            f"{name} did not succeed in getting the value for {setting} on try #{retry + 1}."
+        )
+        return False
+
+    logging.info(
+        f"{name} got the value {resp.data} for {setting} successfully on try #{retry + 1}."
+    )
+    return True
+
+
+def _check_setting_set_response(
+    resp: GoProResp, setting: str, name: str, retry: int
+) -> bool:
+    if resp.status != constants.ErrorCode.SUCCESS:
+        logging.error(
+            f"{name} did not succeed in setting the value of {setting} on try #{retry + 1}."
+        )
+        return False
+
+    logging.info(f"{name} set the value of {setting} successfully on try #{retry + 1}.")
+    return True
 
 
 async def main() -> None:
@@ -569,7 +649,7 @@ async def main() -> None:
             logging.info(
                 f"The connect prompt was displayed, user chose: {connect_prompt}."
             )
-            if connect_prompt is not None:
+            if connect_prompt != "None":
                 await connect_camera(found_devices, connected_cameras, connect_prompt)
                 await enforce_camera_settings(connected_cameras)
 
@@ -617,7 +697,7 @@ logging.basicConfig(
     format="%(asctime)s:%(levelname)s:%(message)s",
     level=logging.INFO,
 )
-RELEASE_VERSION = "v0.2.3"
+RELEASE_VERSION = "v0.3.0"
 logging.info(f"Using gopro-sync version: {RELEASE_VERSION}.")
 
 console = Console()
