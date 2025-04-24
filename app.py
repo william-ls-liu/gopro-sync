@@ -353,63 +353,69 @@ async def record(
     timeout : int | float
         Maximum time, in seconds, to wait for the key press before cancelling.
     """
+
+    cancel_flag: bool = False
+
+    def _on_press(key):
+        logging.info(f"Key {key} was pressed.")
+
+    def _on_release(key):
+        logging.info(f"Key {key} was released.")
+        if key == keyboard.Key.page_down:
+            return False  # stop the listener
+        elif key == keyboard.Key.esc:
+            nonlocal cancel_flag
+            cancel_flag = True
+            return False  # stop the listener
+
     # The key release after pressing ENTER can trigger the event listner, so sleep for a second to ensure
     # no keys are actively being pressed
     await asyncio.sleep(1)
 
-    correct_key: bool = False
+    with console.status(
+        "Switch application focus to Mobility Lab, then press > on remote to start recording. Press ESC to cancel.",
+        spinner="bouncingBar",
+    ):
+        logging.info("Starting keyboard listener, waiting for start trigger.")
+        with keyboard.Listener(on_press=_on_press, on_release=_on_release) as listener:
+            listener.join()
 
-    while not correct_key:
-        with console.status(
-            "Switch application focus to Mobility Lab, then press > on remote to start recording. Press ESC to cancel.",
-            spinner="bouncingBar",
-        ):
-            logging.info("Starting keyboard listener, waiting for start trigger.")
-            with keyboard.Events() as events:
-                event = events.get(timeout)
-            logging.info(f"Keyboard event was: {event.key}.")
-        if event.key == keyboard.Key.page_down:
-            correct_key = True
-            tasks = []
-            async with (
-                asyncio.TaskGroup() as tg
-            ):  # once context manager exits all tasks are awaited
-                for cam in connected_cameras.values():
-                    tasks.append(
-                        tg.create_task(
-                            cam.ble_command.set_shutter(shutter=constants.Toggle.ENABLE)
-                        )
-                    )
-            logging.info("Recording started.")
-        elif event.key == keyboard.Key.esc:
-            console.print("Recording cancelled.")
-            logging.info("Recording cancelled.")
-            return
+    logging.info(f"The value of cancel_flag is {cancel_flag}.")
+    if cancel_flag:
+        console.print("Recording cancelled.")
+        logging.info("Recording cancelled.")
+        return
+
+    tasks: list[asyncio.Task] = []
+    async with (
+        asyncio.TaskGroup() as tg
+    ):  # once context manager exits all tasks are awaited
+        for cam in connected_cameras.values():
+            tasks.append(
+                tg.create_task(
+                    cam.ble_command.set_shutter(shutter=constants.Toggle.ENABLE)
+                )
+            )
+    logging.info("Recording started.")
 
     # Wait for stop trigger
-    correct_key = False
-    while not correct_key:
-        with console.status(
-            "Recording... Press > on remote to stop recording.", spinner="bouncingBar"
-        ):
-            logging.info("Starting keyboard listener, waiting for stop trigger.")
-            with keyboard.Events() as events:
-                event = events.get(timeout)
-            logging.info(f"Keyboard event was: {event.key}.")
-        if event.key == keyboard.Key.page_down:
-            correct_key = True
-            tasks = []
-            async with (
-                asyncio.TaskGroup() as tg
-            ):  # once context manager exits all tasks are awaited
-                for cam in connected_cameras.values():
-                    tasks.append(
-                        tg.create_task(
-                            cam.ble_command.set_shutter(
-                                shutter=constants.Toggle.DISABLE
-                            )
-                        )
-                    )
+    with console.status(
+        "Recording... Press > on remote to stop recording.", spinner="bouncingBar"
+    ):
+        logging.info("Starting keyboard listener, waiting for stop trigger.")
+        with keyboard.Listener(on_press=_on_press, on_release=_on_release) as listener:
+            listener.join()
+
+    tasks = []
+    async with (
+        asyncio.TaskGroup() as tg
+    ):  # once context manager exits all tasks are awaited
+        for cam in connected_cameras.values():
+            tasks.append(
+                tg.create_task(
+                    cam.ble_command.set_shutter(shutter=constants.Toggle.DISABLE)
+                )
+            )
 
 
 async def enforce_camera_settings(
