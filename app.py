@@ -592,7 +592,6 @@ async def _hero13_settings(name: str, cam: WirelessGoPro, retries: int) -> dict:
         "hindsight": constants.settings.Hindsight.OFF,
         "bit_depth": constants.settings.BitDepth.NUM_8_BIT,
         "video_bit_rate": constants.settings.VideoBitRate.HIGH,
-        "auto_power_down": constants.settings.AutoPowerDown.NUM_30_MIN,
     }
 
     return settings
